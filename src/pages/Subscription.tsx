@@ -42,7 +42,7 @@ export function Subscription({ isSubscribed }: { isSubscribed: boolean }) {
   const [selectedPlan, setSelectedPlan] = useState('semester');
   const [isProcessing, setIsProcessing] = useState(false);
   const [mobileNumber, setMobileNumber] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'web' | 'ecocash' | 'onemoney'>('web');
+  const [paymentMethod, setPaymentMethod] = useState< 'ecocash' | 'onemoney'>('web');
   const [instructions, setInstructions] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
