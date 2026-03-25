@@ -1,0 +1,5 @@
+{
+  "name": "CUT Connect",
+  "description": "A connection platform for CUT students featuring profile matching, free registration, and premium chat features.",
+  "requestFramePermissions": ["camera", "geolocation"]
+}

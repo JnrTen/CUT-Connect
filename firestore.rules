@@ -1,0 +1,211 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (uid)
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string (required)
+    //   - email: string (required, format: email)
+    //   - bio: string (optional)
+    //   - gender: string (optional, enum: male, female, other)
+    //   - age: number (optional, >= 18)
+    //   - interests: list (optional)
+    //   - isSubscribed: bool (optional)
+    //   - subscriptionType: string (optional)
+    //   - subscriptionExpiry: timestamp (optional)
+    //   - photoURL: string (optional, format: url)
+    //   - role: string (optional, enum: user, admin)
+    //   - blockedUsers: list (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: profiles
+    // Document ID: profileId (uid)
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string (required)
+    //   - bio: string (optional)
+    //   - gender: string (optional)
+    //   - age: number (optional)
+    //   - interests: list (optional)
+    //   - photoURL: string (optional)
+    //
+    // Collection: matches
+    // Document ID: matchId
+    // Fields:
+    //   - users: list (required, size: 2)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: matches/{matchId}/messages
+    // Document ID: messageId
+    // Fields:
+    //   - senderId: string (required)
+    //   - text: string (required, max: 1000)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: subscriptions
+    // Document ID: subscriptionId
+    // Fields:
+    //   - userId: string (required)
+    //   - amount: number (required)
+    //   - status: string (required, enum: pending, completed, failed)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "mupashepherd@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string &&
+        (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isBlocked(userId, targetId) {
+      return targetId in get(/databases/$(database)/documents/users/$(userId)).data.blockedUsers;
+    }
+
+    function isAnyBlocked(userA, userB) {
+      return isBlocked(userA, userB) || isBlocked(userB, userA);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'displayName', 'email']) &&
+             hasOnlyAllowedFields(['uid', 'displayName', 'email', 'bio', 'gender', 'age', 'interests', 'isSubscribed', 'subscriptionType', 'subscriptionExpiry', 'photoURL', 'role', 'blockedUsers', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 100 &&
+             isValidEmail(data.email) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() < 1000)) &&
+             (!('gender' in data) || data.gender in ['male', 'female', 'other']) &&
+             (!('age' in data) || (data.age is number && data.age >= 18)) &&
+             (!('interests' in data) || data.interests is list) &&
+             (!('isSubscribed' in data) || data.isSubscribed is bool) &&
+             (!('subscriptionType' in data) || data.subscriptionType is string) &&
+             (!('subscriptionExpiry' in data) || data.subscriptionExpiry is timestamp) &&
+             (!('photoURL' in data) || isValidUrl(data.photoURL)) &&
+             (!('role' in data) || data.role in ['user', 'admin']) &&
+             (!('blockedUsers' in data) || data.blockedUsers is list) &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidProfile(data) {
+      return hasRequiredFields(['uid', 'displayName']) &&
+             hasOnlyAllowedFields(['uid', 'displayName', 'bio', 'gender', 'age', 'interests', 'photoURL']) &&
+             data.uid is string &&
+             data.displayName is string && data.displayName.size() < 100 &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() < 1000)) &&
+             (!('photoURL' in data) || isValidUrl(data.photoURL));
+    }
+
+    function isValidMatch(data) {
+      return hasRequiredFields(['users', 'createdAt']) &&
+             hasOnlyAllowedFields(['users', 'createdAt']) &&
+             data.users is list && data.users.size() == 2 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidMessage(data) {
+      return hasRequiredFields(['senderId', 'text', 'createdAt']) &&
+             hasOnlyAllowedFields(['senderId', 'text', 'createdAt']) &&
+             data.senderId is string &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidSubscription(data) {
+      return hasRequiredFields(['userId', 'amount', 'status', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'amount', 'status', 'createdAt']) &&
+             data.userId is string &&
+             data.amount is number && data.amount > 0 &&
+             data.status in ['pending', 'completed', 'failed'] &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      hasRequiredFields(['createdAt']) &&
+                      (request.resource.data.role == 'user' || isAdmin());
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (request.resource.data.role == resource.data.role || isAdmin()) &&
+                      (areImmutableFieldsUnchanged(['uid', 'email', 'createdAt']) || isAdmin());
+    }
+
+    match /profiles/{profileId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(profileId) && isValidProfile(request.resource.data);
+      allow delete: if isOwner(profileId) || isAdmin();
+    }
+
+    match /matches/{matchId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.users;
+      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.users && 
+                      !isAnyBlocked(request.resource.data.users[0], request.resource.data.users[1]) &&
+                      isValidMatch(request.resource.data);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.users;
+        allow create: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.users && 
+                      !isAnyBlocked(get(/databases/$(database)/documents/matches/$(matchId)).data.users[0], get(/databases/$(database)/documents/matches/$(matchId)).data.users[1]) &&
+                      request.resource.data.senderId == request.auth.uid && isValidMessage(request.resource.data);
+      }
+    }
+
+    match /subscriptions/{subscriptionId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId && isValidSubscription(request.resource.data);
+      allow update: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

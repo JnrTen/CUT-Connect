@@ -1,0 +1,96 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A student user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "bio": { "type": "string" },
+        "gender": { "type": "string", "enum": ["male", "female", "other"] },
+        "age": { "type": "integer" },
+        "interests": { "type": "array", "items": { "type": "string" } },
+        "isSubscribed": { "type": "boolean" },
+        "subscriptionType": { "type": "string" },
+        "subscriptionExpiry": { "type": "string", "format": "date-time" },
+        "photoURL": { "type": "string", "format": "url" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "blockedUsers": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "email", "createdAt"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A connection between two users",
+      "type": "object",
+      "properties": {
+        "users": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["users", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A chat message",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "text", "createdAt"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "Public student profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "bio": { "type": "string" },
+        "gender": { "type": "string", "enum": ["male", "female", "other"] },
+        "age": { "type": "integer" },
+        "interests": { "type": "array", "items": { "type": "string" } },
+        "photoURL": { "type": "string", "format": "url" }
+      },
+      "required": ["uid", "displayName"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "A payment record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles (private)"
+    },
+    "/profiles/{profileId}": {
+      "schema": "Profile",
+      "description": "Public student profiles"
+    },
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Matches between users"
+    },
+    "/matches/{matchId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a match"
+    },
+    "/subscriptions/{subscriptionId}": {
+      "schema": "Subscription",
+      "description": "Subscription records"
+    }
+  }
+}
