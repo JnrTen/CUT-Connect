@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { User, Camera, Mail, Heart, Settings, Shield, Zap, Sparkles, CheckCircle2, UserX, Trash2 } from 'lucide-react';
+import { User, Camera, Mail, Heart, Settings, Shield, Zap, Sparkles, CheckCircle2, UserX, Trash2, Edit2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc, setDoc, arrayRemove } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from '../firebase';
-import { GENDERS, INTERESTS } from '../constants';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage, handleFirestoreError, OperationType } from '../firebase';
+import { GENDERS, INTERESTS, PERSONALITY_TRAITS } from '../constants';
 import { cn } from '../lib/utils';
 
 export function Profile({ isSubscribed }: { isSubscribed: boolean }) {
   const [isEditing, setIsEditing] = useState(false);
   const [userData, setUserData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -38,6 +41,17 @@ export function Profile({ isSubscribed }: { isSubscribed: boolean }) {
     });
   };
 
+  const togglePersonalityTrait = (trait: string) => {
+    if (!isEditing) return;
+    setUserData((prev: any) => {
+      const currentTraits = prev.personalityTraits || [];
+      const newTraits = currentTraits.includes(trait)
+        ? currentTraits.filter((t: string) => t !== trait)
+        : [...currentTraits, trait];
+      return { ...prev, personalityTraits: newTraits };
+    });
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser || !userData) return;
@@ -48,7 +62,9 @@ export function Profile({ isSubscribed }: { isSubscribed: boolean }) {
       bio: formData.get('bio') as string,
       age: Number(formData.get('age')),
       gender: formData.get('gender') as string,
-      interests: userData.interests || []
+      interests: userData.interests || [],
+      personalityTraits: userData.personalityTraits || [],
+      photoURL: userData.photoURL // This is updated via handleImageUpload
     };
 
     try {
@@ -62,13 +78,38 @@ export function Profile({ isSubscribed }: { isSubscribed: boolean }) {
         age: updates.age,
         gender: updates.gender,
         interests: updates.interests,
-        photoURL: userData.photoURL
+        personalityTraits: updates.personalityTraits,
+        photoURL: updates.photoURL
       }).catch(e => handleFirestoreError(e, OperationType.UPDATE, `profiles/${auth.currentUser?.uid}`));
 
       setIsEditing(false);
       alert('Profile updated successfully!');
     } catch (error) {
       console.error('Error updating profile:', error);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !auth.currentUser) return;
+
+    // Check file size (limit to 5MB for Storage)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image is too large. Please select an image smaller than 5MB.');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      const storageRef = ref(storage, `profile_pictures/${auth.currentUser.uid}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      setUserData((prev: any) => ({ ...prev, photoURL: downloadURL }));
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Failed to upload image. Please try again.');
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -98,6 +139,26 @@ export function Profile({ isSubscribed }: { isSubscribed: boolean }) {
     );
   }
 
+  if (!userData) {
+    return (
+      <div className="h-[calc(100vh-12rem)] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto">
+            <UserX className="w-8 h-8" />
+          </div>
+          <h3 className="text-xl font-bold text-zinc-900">Profile Not Found</h3>
+          <p className="text-zinc-500">We couldn't find your profile data. Please try signing in again.</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-zinc-900 text-white rounded-xl hover:bg-zinc-800 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-12 pb-24 pt-8">
       <div className="flex items-center justify-between px-4">
@@ -116,9 +177,15 @@ export function Profile({ isSubscribed }: { isSubscribed: boolean }) {
             onClick={() => setIsEditing(!isEditing)}
             className="bg-zinc-900 text-white px-6 py-2 rounded-xl font-medium hover:bg-zinc-800 transition-colors flex items-center space-x-2"
           >
-            <Settings className="w-4 h-4" />
+            <Edit2 className="w-4 h-4" />
             <span>{isEditing ? 'Cancel Editing' : 'Edit Profile'}</span>
           </button>
+          <Link
+            to="/settings"
+            className="p-2 text-zinc-500 hover:text-sky-500 hover:bg-sky-50 rounded-xl transition-all"
+          >
+            <Settings className="w-6 h-6" />
+          </Link>
         </div>
       </div>
 
@@ -126,18 +193,58 @@ export function Profile({ isSubscribed }: { isSubscribed: boolean }) {
         {/* Left Column: Avatar & Basic Info */}
         <div className="space-y-8">
           <div className="relative group">
-            <div className="aspect-square rounded-[2.5rem] overflow-hidden border-8 border-white shadow-2xl">
-              <img
-                src={userData?.photoURL || `https://picsum.photos/seed/${userData?.uid}/800/800`}
-                alt={userData?.displayName}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
+            <div className="aspect-square rounded-[2.5rem] overflow-hidden border-8 border-white shadow-2xl bg-zinc-100 relative">
+              {userData?.photoURL ? (
+                <img
+                  src={userData.photoURL}
+                  alt={userData?.displayName}
+                  className={cn(
+                    "w-full h-full object-cover transition-opacity duration-300",
+                    isUploadingImage ? "opacity-50" : "opacity-100"
+                  )}
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-zinc-300">
+                  <User className="w-20 h-20" />
+                </div>
+              )}
+              
+              {isUploadingImage && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
             </div>
+            
             {isEditing && (
-              <button className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center text-white rounded-[2.5rem] opacity-0 group-hover:opacity-100 transition-opacity">
-                <Camera className="w-10 h-10" />
-              </button>
+              <>
+                <input
+                  type="file"
+                  id="photo-upload"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={isUploadingImage}
+                />
+                <label
+                  htmlFor="photo-upload"
+                  className="absolute -bottom-2 -right-2 w-12 h-12 bg-sky-500 text-white rounded-2xl flex items-center justify-center shadow-lg hover:bg-sky-600 transition-all cursor-pointer hover:scale-110 active:scale-95 z-10"
+                >
+                  <Camera className="w-6 h-6" />
+                </label>
+                
+                {userData?.photoURL && (
+                  <button
+                    type="button"
+                    onClick={() => setUserData((prev: any) => ({ ...prev, photoURL: null }))}
+                    className="absolute -top-2 -right-2 w-8 h-8 bg-white text-red-500 rounded-xl flex items-center justify-center shadow-md hover:bg-red-50 transition-all z-10"
+                    title="Remove Photo"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </>
             )}
           </div>
 
@@ -260,6 +367,32 @@ export function Profile({ isSubscribed }: { isSubscribed: boolean }) {
                     )}
                   >
                     {interest}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <h3 className="text-2xl font-bold flex items-center space-x-3">
+                <Sparkles className="w-6 h-6 text-sky-500" />
+                <span>Personality Traits</span>
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {PERSONALITY_TRAITS.map(trait => (
+                  <button
+                    key={trait}
+                    type="button"
+                    onClick={() => togglePersonalityTrait(trait)}
+                    disabled={!isEditing}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                      userData?.personalityTraits?.includes(trait)
+                        ? "bg-sky-500 text-white border-sky-500 shadow-lg shadow-sky-100"
+                        : "bg-zinc-50 text-zinc-600 border border-zinc-100 hover:border-sky-500 hover:text-sky-500",
+                      "disabled:hover:border-zinc-100 disabled:hover:text-zinc-600"
+                    )}
+                  >
+                    {trait}
                   </button>
                 ))}
               </div>

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Heart, MessageSquare, User, LogOut, Search, Zap } from 'lucide-react';
+import { Heart, MessageSquare, User, LogOut, Search, Zap, Settings } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function Navbar({ user, onLogout }: { user: any, onLogout: () => void }) {
@@ -34,6 +34,10 @@ export function Navbar({ user, onLogout }: { user: any, onLogout: () => void }) 
                 <Link to="/profile" className="p-2 text-zinc-500 hover:text-sky-500 hover:bg-sky-50 rounded-lg transition-all flex items-center space-x-2">
                   <User className="w-5 h-5" />
                   <span className="hidden sm:inline font-medium">Profile</span>
+                </Link>
+                <Link to="/settings" className="p-2 text-zinc-500 hover:text-sky-500 hover:bg-sky-50 rounded-lg transition-all flex items-center space-x-2">
+                  <Settings className="w-5 h-5" />
+                  <span className="hidden sm:inline font-medium">Settings</span>
                 </Link>
                 <button 
                   onClick={onLogout}

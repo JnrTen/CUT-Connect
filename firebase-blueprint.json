@@ -12,12 +12,23 @@
         "gender": { "type": "string", "enum": ["male", "female", "other"] },
         "age": { "type": "integer" },
         "interests": { "type": "array", "items": { "type": "string" } },
+        "personalityTraits": { "type": "array", "items": { "type": "string" } },
         "isSubscribed": { "type": "boolean" },
         "subscriptionType": { "type": "string" },
         "subscriptionExpiry": { "type": "string", "format": "date-time" },
         "photoURL": { "type": "string", "format": "url" },
         "role": { "type": "string", "enum": ["user", "admin"] },
         "blockedUsers": { "type": "array", "items": { "type": "string" } },
+        "preferences": {
+          "type": "object",
+          "properties": {
+            "gender": { "type": "string", "enum": ["male", "female", "other", "any"] },
+            "minAge": { "type": "integer" },
+            "maxAge": { "type": "integer" },
+            "interests": { "type": "array", "items": { "type": "string" } },
+            "personalityTraits": { "type": "array", "items": { "type": "string" } }
+          }
+        },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "displayName", "email", "createdAt"]
@@ -54,6 +65,7 @@
         "gender": { "type": "string", "enum": ["male", "female", "other"] },
         "age": { "type": "integer" },
         "interests": { "type": "array", "items": { "type": "string" } },
+        "personalityTraits": { "type": "array", "items": { "type": "string" } },
         "photoURL": { "type": "string", "format": "url" }
       },
       "required": ["uid", "displayName"]
@@ -69,6 +81,35 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "amount", "status", "createdAt"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "A social media post",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string", "format": "url" },
+        "imageUrl": { "type": "string", "format": "url" },
+        "caption": { "type": "string" },
+        "likes": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "imageUrl", "createdAt"]
+    },
+    "Story": {
+      "title": "Story",
+      "description": "A short-lived story",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string", "format": "url" },
+        "imageUrl": { "type": "string", "format": "url" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "imageUrl", "createdAt"]
     }
   },
   "firestore": {
@@ -91,6 +132,14 @@
     "/subscriptions/{subscriptionId}": {
       "schema": "Subscription",
       "description": "Subscription records"
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Social media posts"
+    },
+    "/stories/{storyId}": {
+      "schema": "Story",
+      "description": "User stories"
     }
   }
 }

@@ -24,7 +24,7 @@ const PLANS = [
   {
     id: 'semester',
     name: 'Semester Pass',
-    price: '$3',
+    price: '$2',
     period: '/semester',
     features: [
       'All Monthly features',
@@ -42,7 +42,7 @@ export function Subscription({ isSubscribed }: { isSubscribed: boolean }) {
   const [selectedPlan, setSelectedPlan] = useState('semester');
   const [isProcessing, setIsProcessing] = useState(false);
   const [mobileNumber, setMobileNumber] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState< 'ecocash' | 'onemoney'>('web');
+  const [paymentMethod, setPaymentMethod] = useState<'ecocash' | 'onemoney'>('ecocash');
   const [instructions, setInstructions] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
@@ -87,7 +87,7 @@ export function Subscription({ isSubscribed }: { isSubscribed: boolean }) {
     if (!auth.currentUser) return;
     
     // Basic validation for mobile payments
-    if (paymentMethod !== 'web' && !mobileNumber.match(/^(071|073|077|078)\d{7}$/)) {
+    if (!mobileNumber.match(/^(071|073|077|078)\d{7}$/)) {
       setError('Please enter a valid Zimbabwean mobile number (e.g., 0771234567)');
       return;
     }
@@ -108,8 +108,8 @@ export function Subscription({ isSubscribed }: { isSubscribed: boolean }) {
           email: auth.currentUser.email,
           amount: amount,
           planId: selectedPlan,
-          mobileNumber: paymentMethod !== 'web' ? mobileNumber : undefined,
-          mobileMethod: paymentMethod !== 'web' ? paymentMethod : undefined
+          mobileNumber: mobileNumber,
+          mobileMethod: paymentMethod
         })
       });
 
@@ -263,9 +263,8 @@ export function Subscription({ isSubscribed }: { isSubscribed: boolean }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {[
-                { id: 'web', label: 'Web' },
                 { id: 'ecocash', label: 'EcoCash' },
                 { id: 'onemoney', label: 'OneMoney' }
               ].map((method) => (
@@ -284,43 +283,20 @@ export function Subscription({ isSubscribed }: { isSubscribed: boolean }) {
               ))}
             </div>
 
-            {paymentMethod !== 'web' && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
-                    {paymentMethod === 'ecocash' ? 'EcoCash' : 'OneMoney'} Number
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="0771234567"
-                    value={mobileNumber}
-                    onChange={(e) => setMobileNumber(e.target.value)}
-                    className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-mono"
-                  />
-                </div>
-                
-                <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-100 space-y-2">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Test Mode Helper</p>
-                  <p className="text-xs text-zinc-500 leading-relaxed">
-                    If your integration is in <span className="font-bold">Test Mode</span>, use these numbers:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {['0771111111', '0711111111'].map(num => (
-                      <button 
-                        key={num}
-                        onClick={() => {
-                          setMobileNumber(num);
-                          setPaymentMethod(num.startsWith('077') ? 'ecocash' : 'onemoney');
-                        }}
-                        className="text-[10px] bg-white border border-zinc-200 px-2 py-1 rounded-lg hover:border-sky-500 transition-colors font-mono"
-                      >
-                        {num}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
+                  {paymentMethod === 'ecocash' ? 'EcoCash' : 'OneMoney'} Number
+                </label>
+                <input
+                  type="tel"
+                  placeholder="0771234567"
+                  value={mobileNumber}
+                  onChange={(e) => setMobileNumber(e.target.value)}
+                  className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-mono"
+                />
               </div>
-            )}
+            </div>
 
             {instructions && (
               <div className="p-4 bg-sky-50 border border-sky-100 rounded-2xl text-sky-700 text-sm font-medium animate-in fade-in slide-in-from-top-2">
@@ -348,7 +324,7 @@ export function Subscription({ isSubscribed }: { isSubscribed: boolean }) {
               ) : (
                 <>
                   <CreditCard className="w-6 h-6" />
-                  <span>{paymentMethod === 'web' ? 'Pay with Paynow' : 'Pay with USSD Push'}</span>
+                  <span>Pay with USSD Push</span>
                 </>
               )}
             </button>

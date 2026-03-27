@@ -15,15 +15,36 @@ const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), "fire
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
-  console.log("Initializing Firebase Admin with Project ID:", firebaseConfig.projectId);
-  admin.initializeApp({
-    projectId: firebaseConfig.projectId,
-  });
+  console.log("Initializing Firebase Admin...");
+  admin.initializeApp();
 }
 
 // Ensure we use the correct database ID for the named database
-console.log("Connecting to Firestore Database:", firebaseConfig.firestoreDatabaseId);
-const db = getFirestore(firebaseConfig.firestoreDatabaseId);
+let db: admin.firestore.Firestore;
+const databaseId = firebaseConfig.firestoreDatabaseId || "(default)";
+
+try {
+  console.log("Connecting to Firestore Database:", databaseId);
+  db = getFirestore(databaseId);
+  // Test connection immediately
+  db.listCollections().then(() => {
+    console.log("Successfully connected to Firestore");
+  }).catch(err => {
+    console.error("Initial Firestore connection test failed:", err);
+  });
+} catch (error) {
+  console.error("Failed to initialize Firestore:", error);
+  db = getFirestore();
+}
+
+// Global error handlers to prevent silent crashes
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,11 +60,19 @@ async function startServer() {
   app.post("/api/paynow/initiate", async (req, res) => {
     const { uid, email, amount, planId, mobileNumber, mobileMethod } = req.body;
     
+    const integrationId = process.env.PAYNOW_INTEGRATION_ID;
+    const integrationKey = process.env.PAYNOW_INTEGRATION_KEY;
+
+    if (!integrationId || !integrationKey) {
+      console.error("Paynow Integration ID or Key is missing in environment variables.");
+      return res.status(500).json({ error: "Paynow configuration error. Please check environment variables." });
+    }
+
     const paynow = new Paynow(
-      process.env.PAYNOW_INTEGRATION_ID || "",
-      process.env.PAYNOW_INTEGRATION_KEY || "",
-      process.env.APP_URL + "/api/paynow/update",
-      process.env.APP_URL + "/payment-status"
+      integrationId,
+      integrationKey,
+      (process.env.APP_URL || "http://localhost:3000") + "/api/paynow/update",
+      (process.env.APP_URL || "http://localhost:3000") + "/payment-status"
     );
 
     // Use UID as reference for easy lookup in update callback
@@ -82,7 +111,7 @@ async function startServer() {
       }
     } catch (error) {
       console.error("Paynow Initiation Error:", error);
-      res.status(500).json({ error: "Internal Server Error" });
+      res.status(500).json({ error: error instanceof Error ? error.message : "Internal Server Error" });
     }
   });
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Heart, Shield, MoreVertical, Search, Zap, MessageSquare, Sparkles, UserX } from 'lucide-react';
+import { Send, Heart, Shield, MoreVertical, Search, Zap, MessageSquare, Sparkles, UserX, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, limit, doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { cn } from '../lib/utils';
@@ -15,6 +15,7 @@ export function Chat({ isSubscribed }: { isSubscribed: boolean }) {
 
   const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
   const [showOptions, setShowOptions] = useState(false);
+  const [pendingMessages, setPendingMessages] = useState<any[]>([]);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -45,13 +46,16 @@ export function Chat({ isSubscribed }: { isSubscribed: boolean }) {
         const data = docSnap.data();
         const otherUserId = data.users.find((uid: string) => uid !== auth.currentUser?.uid);
         
-        // Mock profile for now, in real app fetch from profiles collection
+        // Fetch real profile data
+        const profileDoc = await getDoc(doc(db, 'profiles', otherUserId));
+        const profileData = profileDoc.exists() ? profileDoc.data() : null;
+
         return {
           id: docSnap.id,
           ...data,
           otherUserId,
-          name: 'Student', // Placeholder
-          photoURL: `https://picsum.photos/seed/${otherUserId}/100/100`
+          name: profileData?.displayName || 'Student',
+          photoURL: profileData?.photoURL || `https://picsum.photos/seed/${otherUserId}/100/100`
         };
       }));
       
@@ -82,6 +86,11 @@ export function Chat({ isSubscribed }: { isSubscribed: boolean }) {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setMessages(fetchedMessages);
+      
+      // Remove from pending if found in fetched
+      setPendingMessages(prev => prev.filter(pm => 
+        !fetchedMessages.some(fm => (fm as any).localId === pm.id)
+      ));
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, `matches/${activeMatch.id}/messages`);
     });
@@ -91,24 +100,58 @@ export function Chat({ isSubscribed }: { isSubscribed: boolean }) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, pendingMessages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || !activeMatch) return;
 
     const text = message;
+    const tempId = Date.now().toString();
+    const newMessage = {
+      id: tempId,
+      text,
+      senderId: auth.currentUser?.uid,
+      status: 'sending' as const,
+      createdAt: { seconds: Date.now() / 1000 }
+    };
+
+    setPendingMessages(prev => [...prev, newMessage]);
     setMessage('');
 
     try {
       await addDoc(collection(db, 'matches', activeMatch.id, 'messages'), {
         senderId: auth.currentUser?.uid,
         text,
+        localId: tempId,
         createdAt: serverTimestamp()
-      }).catch(e => handleFirestoreError(e, OperationType.WRITE, `matches/${activeMatch.id}/messages`));
+      });
     } catch (error) {
       console.error('Error sending message:', error);
+      setPendingMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: 'error' } : m));
     }
+  };
+
+  const handleRetryMessage = async (failedMsg: any) => {
+    if (!activeMatch) return;
+    
+    setPendingMessages(prev => prev.map(m => m.id === failedMsg.id ? { ...m, status: 'sending' } : m));
+    
+    try {
+      await addDoc(collection(db, 'matches', activeMatch.id, 'messages'), {
+        senderId: auth.currentUser?.uid,
+        text: failedMsg.text,
+        localId: failedMsg.id,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error retrying message:', error);
+      setPendingMessages(prev => prev.map(m => m.id === failedMsg.id ? { ...m, status: 'error' } : m));
+    }
+  };
+
+  const handleRemoveFailedMessage = (id: string) => {
+    setPendingMessages(prev => prev.filter(m => m.id !== id));
   };
 
   const handleBlockUser = async () => {
@@ -317,6 +360,52 @@ export function Chat({ isSubscribed }: { isSubscribed: boolean }) {
                     <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-2">
                       {msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Sending...'}
                     </span>
+                  </div>
+                ))}
+
+                {pendingMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className="flex flex-col space-y-1 items-end"
+                  >
+                    <div
+                      className={cn(
+                        "p-4 rounded-2xl max-w-[80%] shadow-sm rounded-br-none",
+                        msg.status === 'error' 
+                          ? "bg-red-50 text-red-700 border border-red-100" 
+                          : "bg-sky-500 text-white opacity-70 shadow-sky-100"
+                      )}
+                    >
+                      <p className="text-sm">{msg.text}</p>
+                    </div>
+                    <div className="flex items-center space-x-2 px-2">
+                      {msg.status === 'error' ? (
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center space-x-1">
+                            <AlertCircle className="w-3 h-3" />
+                            <span>Failed to send</span>
+                          </span>
+                          <button
+                            onClick={() => handleRetryMessage(msg)}
+                            className="p-1 text-zinc-400 hover:text-sky-500 transition-colors"
+                            title="Retry"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleRemoveFailedMessage(msg.id)}
+                            className="p-1 text-zinc-400 hover:text-red-500 transition-colors"
+                            title="Remove"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                          Sending...
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
                 <div ref={messagesEndRef} />

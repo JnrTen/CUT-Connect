@@ -71,7 +71,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
           (request.auth.token.email == "mupashepherd@gmail.com" && request.auth.token.email_verified == true));
     }
 
@@ -111,7 +112,7 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return hasRequiredFields(['uid', 'displayName', 'email']) &&
-             hasOnlyAllowedFields(['uid', 'displayName', 'email', 'bio', 'gender', 'age', 'interests', 'isSubscribed', 'subscriptionType', 'subscriptionExpiry', 'photoURL', 'role', 'blockedUsers', 'createdAt']) &&
+             hasOnlyAllowedFields(['uid', 'displayName', 'email', 'bio', 'gender', 'age', 'interests', 'personalityTraits', 'isSubscribed', 'subscriptionType', 'subscriptionExpiry', 'photoURL', 'role', 'blockedUsers', 'preferences', 'createdAt']) &&
              data.uid is string && data.uid.size() > 0 &&
              data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 100 &&
              isValidEmail(data.email) &&
@@ -119,21 +120,33 @@ service cloud.firestore {
              (!('gender' in data) || data.gender in ['male', 'female', 'other']) &&
              (!('age' in data) || (data.age is number && data.age >= 18)) &&
              (!('interests' in data) || data.interests is list) &&
+             (!('personalityTraits' in data) || data.personalityTraits is list) &&
              (!('isSubscribed' in data) || data.isSubscribed is bool) &&
              (!('subscriptionType' in data) || data.subscriptionType is string) &&
              (!('subscriptionExpiry' in data) || data.subscriptionExpiry is timestamp) &&
              (!('photoURL' in data) || isValidUrl(data.photoURL)) &&
              (!('role' in data) || data.role in ['user', 'admin']) &&
              (!('blockedUsers' in data) || data.blockedUsers is list) &&
+             (!('preferences' in data) || (
+               data.preferences is map &&
+               data.preferences.keys().hasOnly(['gender', 'minAge', 'maxAge', 'interests', 'personalityTraits']) &&
+               data.preferences.gender in ['male', 'female', 'other', 'any'] &&
+               data.preferences.minAge is number &&
+               data.preferences.maxAge is number &&
+               data.preferences.interests is list &&
+               data.preferences.personalityTraits is list
+             )) &&
              (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
     function isValidProfile(data) {
       return hasRequiredFields(['uid', 'displayName']) &&
-             hasOnlyAllowedFields(['uid', 'displayName', 'bio', 'gender', 'age', 'interests', 'photoURL']) &&
+             hasOnlyAllowedFields(['uid', 'displayName', 'bio', 'gender', 'age', 'interests', 'personalityTraits', 'photoURL']) &&
              data.uid is string &&
              data.displayName is string && data.displayName.size() < 100 &&
              (!('bio' in data) || (data.bio is string && data.bio.size() < 1000)) &&
+             (!('interests' in data) || data.interests is list) &&
+             (!('personalityTraits' in data) || data.personalityTraits is list) &&
              (!('photoURL' in data) || isValidUrl(data.photoURL));
     }
 
@@ -154,11 +167,34 @@ service cloud.firestore {
 
     function isValidSubscription(data) {
       return hasRequiredFields(['userId', 'amount', 'status', 'createdAt']) &&
-             hasOnlyAllowedFields(['userId', 'amount', 'status', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'amount', 'planId', 'status', 'pollUrl', 'method', 'createdAt', 'updatedAt']) &&
              data.userId is string &&
              data.amount is number && data.amount > 0 &&
              data.status in ['pending', 'completed', 'failed'] &&
              data.createdAt is timestamp;
+    }
+
+    function isValidPost(data) {
+      return hasRequiredFields(['userId', 'userName', 'imageUrl', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'userName', 'userPhoto', 'imageUrl', 'caption', 'likes', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.userName is string && data.userName.size() > 0 &&
+             (!('userPhoto' in data) || isValidUrl(data.userPhoto)) &&
+             isValidUrl(data.imageUrl) &&
+             (!('caption' in data) || (data.caption is string && data.caption.size() < 1000)) &&
+             (!('likes' in data) || data.likes is number) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidStory(data) {
+      return hasRequiredFields(['userId', 'userName', 'imageUrl', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'userName', 'userPhoto', 'imageUrl', 'createdAt', 'expiresAt']) &&
+             data.userId == request.auth.uid &&
+             data.userName is string && data.userName.size() > 0 &&
+             (!('userPhoto' in data) || isValidUrl(data.userPhoto)) &&
+             isValidUrl(data.imageUrl) &&
+             data.createdAt is timestamp &&
+             (!('expiresAt' in data) || data.expiresAt is timestamp);
     }
 
     // ===============================================================
@@ -201,6 +237,19 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
       allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId && isValidSubscription(request.resource.data);
       allow update: if isAdmin();
+    }
+
+    match /posts/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidPost(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /stories/{storyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidStory(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Default deny

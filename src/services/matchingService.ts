@@ -1,38 +1,49 @@
-import { UserProfile, UserPreferences } from '../types';
+import { UserProfile } from '../types';
 
 export const calculateMatchScore = (user: UserProfile, potentialMatch: UserProfile): number => {
   let score = 0;
 
+  // 1. Basic Filters (Hard requirements)
   // Gender Match
   if (user.preferences.gender !== 'any' && user.preferences.gender !== potentialMatch.gender) {
-    return 0; // Not a match
+    return 0;
   }
 
   // Age Match
   if (potentialMatch.age < user.preferences.minAge || potentialMatch.age > user.preferences.maxAge) {
-    return 0; // Not a match
+    return 0;
   }
 
-  // Interests Overlap
+  // 2. Shared Interests (Nuanced)
   const userInterests = user.preferences?.interests || [];
   const potentialInterests = potentialMatch.preferences?.interests || (potentialMatch as any).interests || [];
   
   const commonInterests = userInterests.filter(i => potentialInterests.includes(i));
-  score += commonInterests.length * 10;
+  // More weight for shared interests
+  score += commonInterests.length * 15;
 
-  // Reciprocal Interest (if they match each other's preferences)
-  const userMinAge = user.preferences?.minAge || 18;
-  const userMaxAge = user.preferences?.maxAge || 100;
-  const userPrefGender = user.preferences?.gender || 'any';
+  // 3. Personality Traits (New)
+  const userTraits = user.personalityTraits || [];
+  const potentialTraits = potentialMatch.personalityTraits || [];
+  
+  const commonTraits = userTraits.filter(t => potentialTraits.includes(t));
+  score += commonTraits.length * 20;
 
+  // 4. Reciprocal Interest (Compatibility)
   const matchMinAge = potentialMatch.preferences?.minAge || 18;
   const matchMaxAge = potentialMatch.preferences?.maxAge || 100;
   const matchPrefGender = potentialMatch.preferences?.gender || 'any';
 
-  if (matchPrefGender === 'any' || matchPrefGender === user.gender) {
-    if (user.age >= matchMinAge && user.age <= matchMaxAge) {
-      score += 50;
-    }
+  const isReciprocalGender = matchPrefGender === 'any' || matchPrefGender === user.gender;
+  const isReciprocalAge = user.age >= matchMinAge && user.age <= matchMaxAge;
+
+  if (isReciprocalGender && isReciprocalAge) {
+    score += 50; // Big boost for mutual preference match
+  }
+
+  // 5. Bio Sentiment/Length (Bonus)
+  if (potentialMatch.bio && potentialMatch.bio.length > 50) {
+    score += 10; // Reward users who put effort into their bio
   }
 
   return score;

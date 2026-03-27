@@ -1,13 +1,14 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { Navbar } from './components/Navbar';
 import { Home } from './pages/Home';
 import { Discover } from './pages/Discover';
 import { Chat } from './pages/Chat';
 import { Profile } from './pages/Profile';
+import { Settings } from './pages/Settings';
 import { Auth } from './pages/Auth';
 import { PaymentStatus } from './pages/PaymentStatus';
 import { Subscription } from './pages/Subscription';
@@ -32,6 +33,54 @@ export default function App() {
       setUserData(null);
       return;
     }
+
+    const ensureUserDocs = async () => {
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (!userDoc.exists()) {
+          console.log('User document missing, creating...');
+          const newUserData = {
+            uid: user.uid,
+            displayName: user.displayName || 'Student',
+            email: user.email,
+            photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/200/200`,
+            isSubscribed: false,
+            role: 'user',
+            interests: [],
+            personalityTraits: [],
+            preferences: {
+              gender: 'any',
+              minAge: 18,
+              maxAge: 30,
+              interests: [],
+              personalityTraits: []
+            },
+            blockedUsers: [],
+            createdAt: serverTimestamp()
+          };
+          await setDoc(userDocRef, newUserData);
+
+          // Also ensure profile exists
+          const profileDocRef = doc(db, 'profiles', user.uid);
+          const profileDoc = await getDoc(profileDocRef);
+          if (!profileDoc.exists()) {
+            await setDoc(profileDocRef, {
+              uid: user.uid,
+              displayName: user.displayName || 'Student',
+              photoURL: user.photoURL || `https://picsum.photos/seed/${user.uid}/200/200`,
+              interests: [],
+              personalityTraits: []
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error ensuring user docs:', error);
+      }
+    };
+
+    ensureUserDocs();
 
     const userDocRef = doc(db, 'users', user.uid);
     const unsubscribeUser = onSnapshot(userDocRef, (snapshot) => {
@@ -77,6 +126,7 @@ export default function App() {
               <Route path="/discover" element={user ? <Discover isSubscribed={isSubscribed} /> : <Navigate to="/auth" />} />
               <Route path="/chat" element={user ? <Chat isSubscribed={isSubscribed} /> : <Navigate to="/auth" />} />
               <Route path="/profile" element={user ? <Profile isSubscribed={isSubscribed} /> : <Navigate to="/auth" />} />
+              <Route path="/settings" element={user ? <Settings /> : <Navigate to="/auth" />} />
               <Route path="/subscription" element={user ? <Subscription isSubscribed={isSubscribed} /> : <Navigate to="/auth" />} />
               <Route path="/payment-status" element={<PaymentStatus isSubscribed={isSubscribed} />} />
             </Routes>

@@ -10,3 +10,7 @@ export const GENDERS = [
 export const INTERESTS = [
   'Music', 'Sports', 'Reading', 'Coding', 'Art', 'Travel', 'Food', 'Gaming', 'Movies', 'Fitness'
 ];
+
+export const PERSONALITY_TRAITS = [
+  'Introvert', 'Extrovert', 'Adventurous', 'Creative', 'Analytical', 'Empathetic', 'Ambitious', 'Easy-going', 'Organized', 'Spontaneous'
+];
