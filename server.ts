@@ -15,8 +15,10 @@ const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), "fire
 
 // Initialize Firebase Admin
 if (!admin.apps.length) {
-  console.log("Initializing Firebase Admin...");
-  admin.initializeApp();
+  console.log("Initializing Firebase Admin with Project ID:", firebaseConfig.projectId);
+  admin.initializeApp({
+    projectId: firebaseConfig.projectId,
+  });
 }
 
 // Ensure we use the correct database ID for the named database
@@ -167,6 +169,25 @@ async function startServer() {
           console.log(`Subscription updated for user: ${uid}`);
         } catch (error) {
           console.error("Error updating Firestore after payment:", error);
+        }
+      } else if (paymentStatus === "Cancelled" || paymentStatus === "Failed") {
+        try {
+          // Update subscription record to failed
+          const subQuery = await db.collection("subscriptions")
+            .where("userId", "==", uid)
+            .where("status", "==", "pending")
+            .limit(1)
+            .get();
+          
+          if (!subQuery.empty) {
+            await subQuery.docs[0].ref.update({
+              status: "failed",
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+          }
+          console.log(`Subscription failed/cancelled for user: ${uid}`);
+        } catch (error) {
+          console.error("Error updating Firestore after failed payment:", error);
         }
       }
     }

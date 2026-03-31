@@ -67,6 +67,12 @@ export function Subscription({ isSubscribed }: { isSubscribed: boolean }) {
           // The parent component will update isSubscribed via onSnapshot in App.tsx
           // but we can also force a refresh or show success here
           window.location.reload(); 
+        } else if (data.status === 'failed') {
+          clearInterval(interval);
+          setPollInterval(null);
+          setIsProcessing(false);
+          setInstructions(null);
+          setError('failed transaction try again later make sure you have funds');
         }
       } catch (err) {
         console.error('Polling error:', err);
@@ -122,12 +128,12 @@ export function Subscription({ isSubscribed }: { isSubscribed: boolean }) {
         // Start polling the server for status updates
         startPolling(auth.currentUser.uid);
       } else {
-        setError(data.error || 'Failed to initiate payment');
+        setError('failed transaction try again later make sure you have funds');
         setIsProcessing(false);
       }
     } catch (err) {
       console.error('Subscription error:', err);
-      setError('Failed to start payment process. Please try again.');
+      setError('failed transaction try again later make sure you have funds');
       setIsProcessing(false);
     }
   };
